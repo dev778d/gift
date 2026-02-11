@@ -101,42 +101,78 @@ yesBtn.addEventListener('click', () => {
     // audio.play();
 });
 
-// No button mouse movement handler with smooth evasion
+// Smooth No button evasion with mouse tracking
 let isEvading = false;
+let mouseX = 0;
+let mouseY = 0;
 
-noBtn.addEventListener('mouseenter', (e) => {
+// Track mouse position continuously for smoother evasion
+document.addEventListener('mousemove', (e) => {
+    mouseX = e.clientX;
+    mouseY = e.clientY;
+});
+
+// Check distance from button and evade proactively
+function checkAndEvade() {
+    if (isEvading) return;
+    
+    const btnRect = noBtn.getBoundingClientRect();
+    const btnCenterX = btnRect.left + btnRect.width / 2;
+    const btnCenterY = btnRect.top + btnRect.height / 2;
+    
+    const distance = Math.sqrt(
+        Math.pow(mouseX - btnCenterX, 2) + 
+        Math.pow(mouseY - btnCenterY, 2)
+    );
+    
+    // Evade when mouse gets within 150px
+    if (distance < 150) {
+        evadeButton();
+    }
+}
+
+function evadeButton() {
     if (isEvading) return;
     isEvading = true;
     
     const containerRect = buttonsContainer.getBoundingClientRect();
     const btnRect = noBtn.getBoundingClientRect();
     
-    // Calculate available space
     const maxX = containerRect.width - btnRect.width;
     const maxY = containerRect.height - btnRect.height;
     
-    // Generate random position away from current position
     const currentX = parseFloat(noBtn.style.left) || 0;
     const currentY = parseFloat(noBtn.style.top) || 0;
     
-    let newX = Math.random() * maxX;
-    let newY = Math.random() * maxY;
+    // Calculate direction away from mouse
+    const btnCenterX = currentX + btnRect.width / 2;
+    const btnCenterY = currentY + btnRect.height / 2;
     
-    // Ensure significant movement for smooth visual effect
-    while (Math.abs(newX - currentX) < 100 || Math.abs(newY - currentY) < 50) {
-        newX = Math.random() * maxX;
-        newY = Math.random() * maxY;
-    }
+    const mouseRelX = mouseX - containerRect.left;
+    const mouseRelY = mouseY - containerRect.top;
+    
+    const angleFromMouse = Math.atan2(
+        btnCenterY - mouseRelY,
+        btnCenterX - mouseRelX
+    );
+    
+    // Move in opposite direction from mouse
+    const moveDistance = 200;
+    let newX = currentX + Math.cos(angleFromMouse) * moveDistance;
+    let newY = currentY + Math.sin(angleFromMouse) * moveDistance;
+    
+    // Add some randomness
+    newX += (Math.random() - 0.5) * 100;
+    newY += (Math.random() - 0.5) * 50;
     
     // Ensure button doesn't overlap with Yes button
     const yesBtnRect = yesBtn.getBoundingClientRect();
     const yesBtnX = yesBtnRect.left - containerRect.left;
     const yesBtnY = yesBtnRect.top - containerRect.top;
     
-    // If too close to Yes button, move further away
-    if (Math.abs(newX - yesBtnX) < 150 && Math.abs(newY - yesBtnY) < 80) {
-        newX = newX > yesBtnX ? newX + 100 : newX - 100;
-        newY = newY > yesBtnY ? newY + 50 : newY - 50;
+    if (Math.abs(newX - yesBtnX) < 180 && Math.abs(newY - yesBtnY) < 90) {
+        newX = newX > yesBtnX ? yesBtnX + 200 : yesBtnX - 200;
+        newY = newY > yesBtnY ? yesBtnY + 70 : yesBtnY - 70;
     }
     
     // Constrain to container bounds
@@ -146,10 +182,9 @@ noBtn.addEventListener('mouseenter', (e) => {
     noBtn.style.left = `${newX}px`;
     noBtn.style.top = `${newY}px`;
     
-    // Allow next evasion after animation completes
     setTimeout(() => {
         isEvading = false;
-    }, 300);
+    }, 500);
     
     // Change text occasionally
     noBtnClickCount++;
@@ -168,7 +203,13 @@ noBtn.addEventListener('mouseenter', (e) => {
     
     // Make Yes button bigger to encourage clicking it
     yesBtn.style.transform = `scale(${1 + noBtnClickCount * 0.05})`;
-});
+}
+
+// Continuously check mouse position for smooth evasion
+setInterval(checkAndEvade, 50);
+
+// Also keep the mouseenter event for backup
+noBtn.addEventListener('mouseenter', evadeButton);
 
 // Touch support for mobile
 noBtn.addEventListener('touchstart', (e) => {
