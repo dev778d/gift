@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence, useSpring, useMotionValue, useTransform } from 'framer-motion';
-import './page.css';
 
 export default function ValentinePage() {
   const [showSuccess, setShowSuccess] = useState(false);
