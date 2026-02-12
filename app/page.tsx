@@ -1,19 +1,26 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { motion, AnimatePresence, useSpring, useMotionValue, useTransform } from 'framer-motion';
 import './page.css';
 
 export default function ValentinePage() {
   const [showSuccess, setShowSuccess] = useState(false);
-  const [noButtonPosition, setNoButtonPosition] = useState({ x: 0, y: 0 });
-  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const [noButtonText, setNoButtonText] = useState('No 😢');
   const [yesButtonScale, setYesButtonScale] = useState(1);
   const [attemptCount, setAttemptCount] = useState(0);
-  const [particles, setParticles] = useState<any[]>([]);
-  const noButtonRef = useRef<HTMLButtonElement>(null);
+  
+  // Motion values for smooth physics
+  const mouseX = useMotionValue(0);
+  const mouseY = useMotionValue(0);
+  
+  // Spring config for "sleek" feeling
+  const springConfig = { stiffness: 150, damping: 20, mass: 0.6 };
+  const buttonX = useSpring(0, springConfig);
+  const buttonY = useSpring(0, springConfig);
+  
   const containerRef = useRef<HTMLDivElement>(null);
+  const noButtonRef = useRef<HTMLButtonElement>(null);
 
   const noTexts = [
     'No 😢',
@@ -22,253 +29,193 @@ export default function ValentinePage() {
     'Think again! 😭',
     'Please? 🙏',
     'Last chance! 😿',
+    'You are mean! 😤',
+    'I am crying... 🌊',
+    'Just click Yes! ✨'
   ];
 
-  // Generate floating particles
-  useEffect(() => {
-    const newParticles = Array.from({ length: 30 }, (_, i) => ({
+  // Particle background data
+  const particles = useMemo(() => {
+    return Array.from({ length: 25 }, (_, i) => ({
       id: i,
       x: Math.random() * 100,
+      y: Math.random() * 100,
+      size: Math.random() * 20 + 10,
+      duration: Math.random() * 20 + 10,
       delay: Math.random() * 5,
-      duration: 5 + Math.random() * 10,
-      size: 20 + Math.random() * 30,
-      emoji: ['💕', '💖', '💗', '💓', '💝', '✨', '⭐'][Math.floor(Math.random() * 7)],
+      emoji: ['💖', '✨', '🌸', '💕', '🍭'][Math.floor(Math.random() * 5)]
     }));
-    setParticles(newParticles);
   }, []);
 
-  // Track mouse position
+  // Handle Mouse Movement for Repulsion
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      setMousePosition({ x: e.clientX, y: e.clientY });
+      mouseX.set(e.clientX);
+      mouseY.set(e.clientY);
+
+      if (!noButtonRef.current || showSuccess) return;
+
+      const rect = noButtonRef.current.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+
+      const distance = Math.sqrt(
+        Math.pow(e.clientX - centerX, 2) + Math.pow(e.clientY - centerY, 2)
+      );
+
+      // Repulsion logic
+      if (distance < 150) {
+        const angle = Math.atan2(centerY - e.clientY, centerX - e.clientX);
+        const force = (150 - distance) / 150;
+        const moveDist = force * 250;
+
+        let newX = buttonX.get() + Math.cos(angle) * moveDist;
+        let newY = buttonY.get() + Math.sin(angle) * moveDist;
+
+        // Boundary checks (roughly keep it on screen)
+        const padding = 100;
+        if (Math.abs(newX) > window.innerWidth / 2 - padding) newX = (window.innerWidth / 2 - padding) * Math.sign(newX);
+        if (Math.abs(newY) > window.innerHeight / 2 - padding) newY = (window.innerHeight / 2 - padding) * Math.sign(newY);
+
+        buttonX.set(newX);
+        buttonY.set(newY);
+
+        // Update state for Yes button growth
+        if (distance < 80) {
+          setAttemptCount(prev => {
+            const next = prev + 1;
+            if (next % 5 === 0) { // Change text every few "near misses"
+               setNoButtonText(noTexts[Math.min(Math.floor(next/5), noTexts.length - 1)]);
+            }
+            return next;
+          });
+          setYesButtonScale(1 + (attemptCount * 0.02));
+        }
+      }
     };
 
     window.addEventListener('mousemove', handleMouseMove);
     return () => window.removeEventListener('mousemove', handleMouseMove);
-  }, []);
-
-  // Smooth button evasion based on mouse proximity
-  useEffect(() => {
-    if (!noButtonRef.current || !containerRef.current || showSuccess) return;
-
-    const checkProximity = () => {
-      const button = noButtonRef.current;
-      const container = containerRef.current;
-      if (!button || !container) return;
-
-      const buttonRect = button.getBoundingClientRect();
-      const containerRect = container.getBoundingClientRect();
-      
-      const buttonCenterX = buttonRect.left + buttonRect.width / 2;
-      const buttonCenterY = buttonRect.top + buttonRect.height / 2;
-
-      const distance = Math.sqrt(
-        Math.pow(mousePosition.x - buttonCenterX, 2) +
-        Math.pow(mousePosition.y - buttonCenterY, 2)
-      );
-
-      // Trigger evasion when mouse is within 120px
-      if (distance < 120) {
-        // Calculate angle away from mouse
-        const angle = Math.atan2(
-          buttonCenterY - mousePosition.y,
-          buttonCenterX - mousePosition.x
-        );
-
-        // Move button away from mouse
-        const moveDistance = 150;
-        let newX = Math.cos(angle) * moveDistance + (Math.random() - 0.5) * 100;
-        let newY = Math.sin(angle) * moveDistance + (Math.random() - 0.5) * 50;
-
-        // Keep within bounds
-        const maxX = containerRect.width - buttonRect.width - 20;
-        const maxY = containerRect.height - buttonRect.height - 20;
-        
-        newX = Math.max(-maxX/2, Math.min(newX, maxX/2));
-        newY = Math.max(-maxY/2, Math.min(newY, maxY/2));
-
-        setNoButtonPosition({ x: newX, y: newY });
-
-        // Update text and scale
-        const newCount = attemptCount + 1;
-        setAttemptCount(newCount);
-        if (newCount < noTexts.length) {
-          setNoButtonText(noTexts[newCount]);
-        }
-        setYesButtonScale(1 + newCount * 0.08);
-      }
-    };
-
-    const interval = setInterval(checkProximity, 50);
-    return () => clearInterval(interval);
-  }, [mousePosition, showSuccess, attemptCount]);
+  }, [showSuccess, attemptCount, buttonX, buttonY, mouseX, mouseY]);
 
   const handleYesClick = () => {
     setShowSuccess(true);
-    // Create celebration burst
-    const burst = Array.from({ length: 50 }, (_, i) => ({
-      id: 100 + i,
-      x: 50,
-      delay: i * 0.02,
-      duration: 2,
-      size: 30 + Math.random() * 20,
-      emoji: ['💕', '💖', '💗', '💓', '💝'][i % 5],
-    }));
-    setParticles([...particles, ...burst]);
   };
+
+  // Parallax effect for the card
+  const rotateX = useTransform(mouseY, [0, typeof window !== 'undefined' ? window.innerHeight : 1000], [5, -5]);
+  const rotateY = useTransform(mouseX, [0, typeof window !== 'undefined' ? window.innerWidth : 1000], [-5, 5]);
 
   return (
     <div className="page-container" ref={containerRef}>
-      {/* Animated particles background */}
-      <div className="particles">
-        {particles.map((particle) => (
+      {/* Dynamic Background */}
+      <motion.div className="bg-glow" style={{ 
+        left: mouseX, 
+        top: mouseY,
+        transform: 'translate(-50%, -50%)'
+      }} />
+      
+      <div className="particles-container">
+        {particles.map((p) => (
           <motion.div
-            key={particle.id}
-            className="particle"
-            initial={{ y: '100vh', x: `${particle.x}vw`, opacity: 0 }}
-            animate={{
-              y: '-100vh',
-              opacity: [0, 1, 1, 0],
-              rotate: [0, 360],
+            key={p.id}
+            className="floating-emoji"
+            initial={{ y: '110vh', x: `${p.x}vw`, opacity: 0 }}
+            animate={{ 
+              y: '-10vh', 
+              opacity: [0, 0.6, 0.6, 0],
+              rotate: 360 
             }}
             transition={{
-              duration: particle.duration,
-              delay: particle.delay,
+              duration: p.duration,
+              delay: p.delay,
               repeat: Infinity,
-              ease: 'linear',
+              ease: "linear"
             }}
-            style={{ fontSize: `${particle.size}px` }}
+            style={{ fontSize: p.size }}
           >
-            {particle.emoji}
+            {p.emoji}
           </motion.div>
         ))}
       </div>
 
       <motion.div
-        className="card"
-        initial={{ scale: 0.8, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ duration: 0.6, ease: 'easeOut' }}
+        className="glass-card"
+        style={{ rotateX, rotateY, transformStyle: 'preserve-3d' }}
+        initial={{ opacity: 0, y: 50, scale: 0.9 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
       >
-        <motion.div
-          className="emoji"
-          animate={{
-            scale: [1, 1.2, 1, 1.3, 1],
-            rotate: [0, -10, 0, 10, 0],
-          }}
-          transition={{
-            duration: 2,
-            repeat: Infinity,
-            ease: 'easeInOut',
-          }}
+        <motion.div 
+          className="main-emoji"
+          animate={{ y: [0, -15, 0] }}
+          transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
         >
-          💖
+          {showSuccess ? '🤡' : '💝'}
         </motion.div>
 
-        <h1 className="question">Will you be my Valentine?</h1>
-        <p className="subtitle">Please say yes! 🥺</p>
+        <h1 className="main-title">
+          {showSuccess ? "GOTCHA!" : "Will you be my Valentine?"}
+        </h1>
+        
+        <p className="main-subtitle">
+          {showSuccess ? "It was all a prank! 😂" : "I promise I'm nice... mostly. 🥺"}
+        </p>
 
-        <div className="buttons-container">
-          <motion.button
-            className="btn yes-btn"
-            onClick={handleYesClick}
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.95 }}
-            animate={{
-              scale: yesButtonScale,
-              boxShadow: [
-                '0 8px 25px rgba(255, 107, 157, 0.4)',
-                '0 12px 35px rgba(255, 107, 157, 0.6)',
-                '0 8px 25px rgba(255, 107, 157, 0.4)',
-              ],
-            }}
-            transition={{
-              boxShadow: { duration: 2, repeat: Infinity },
-              scale: { duration: 0.3 },
-            }}
-          >
-            Yes! 💕
-          </motion.button>
-
-          <motion.button
-            ref={noButtonRef}
-            className="btn no-btn"
-            animate={{
-              x: noButtonPosition.x,
-              y: noButtonPosition.y,
-            }}
-            transition={{
-              type: 'spring',
-              stiffness: 300,
-              damping: 20,
-              mass: 0.5,
-            }}
-            whileHover={{ scale: 0.95 }}
-          >
-            {noButtonText}
-          </motion.button>
-        </div>
-      </motion.div>
-
-      {/* Success/Prank Message */}
-      <AnimatePresence>
-        {showSuccess && (
-          <motion.div
-            className="success-overlay"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            <motion.div
-              className="celebration"
-              initial={{ scale: 0, rotate: -180 }}
-              animate={{ scale: 1, rotate: 0 }}
-              transition={{
-                type: 'spring',
-                stiffness: 200,
-                damping: 15,
-              }}
+        {!showSuccess && (
+          <div className="actions-wrapper">
+            <motion.button
+              className="action-btn yes-primary"
+              onClick={handleYesClick}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              style={{ scale: yesButtonScale }}
             >
-              <motion.h2
-                animate={{
-                  scale: [1, 1.1, 1],
-                  rotate: [0, 5, -5, 0],
-                }}
-                transition={{
-                  duration: 0.5,
-                  repeat: Infinity,
-                  repeatDelay: 1,
-                }}
-              >
-                JUST KIDDING! 😂🤣
-              </motion.h2>
-              <p>It's a PRANK! Got you! 😜🎭</p>
-              <div className="hearts-explosion">
-                {Array.from({ length: 10 }).map((_, i) => (
-                  <motion.span
-                    key={i}
-                    initial={{ scale: 0, y: 0 }}
-                    animate={{
-                      scale: [0, 1.5, 1],
-                      y: [0, -50 - i * 10, -100 - i * 20],
-                      x: [(i - 5) * 10, (i - 5) * 30],
-                      opacity: [0, 1, 0],
-                    }}
-                    transition={{
-                      duration: 2,
-                      delay: i * 0.1,
-                      repeat: Infinity,
-                      repeatDelay: 1,
-                    }}
-                  >
-                    {['💕', '💖', '💗', '💓', '💝'][i % 5]}
-                  </motion.span>
-                ))}
+              Yes! 💕
+            </motion.button>
+
+            <motion.button
+              ref={noButtonRef}
+              className="action-btn no-secondary"
+              style={{ x: buttonX, y: buttonY }}
+              transition={{ type: 'spring', ...springConfig }}
+            >
+              {noButtonText}
+            </motion.button>
+          </div>
+        )}
+
+        <AnimatePresence>
+          {showSuccess && (
+            <motion.div 
+              className="prank-reveal"
+              initial={{ opacity: 0, scale: 0.5 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ type: 'spring', damping: 12 }}
+            >
+              <div className="reveal-content">
+                <p>You actually clicked Yes? <br/><span>How sweet! But...</span></p>
+                <div className="meme-text">PRANKED! 🎭</div>
+                <motion.button 
+                  className="reset-btn"
+                  onClick={() => {
+                    setShowSuccess(false);
+                    setAttemptCount(0);
+                    setYesButtonScale(1);
+                    buttonX.set(0);
+                    buttonY.set(0);
+                  }}
+                  whileHover={{ scale: 1.1 }}
+                >
+                  Try Again? 🔄
+                </motion.button>
               </div>
             </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          )}
+        </AnimatePresence>
+      </motion.div>
+      
+      <div className="vignette" />
     </div>
   );
 }
