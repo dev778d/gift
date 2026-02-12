@@ -48,9 +48,9 @@ export default function ValentinePage() {
 
   // Handle Mouse Movement for Repulsion
   useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      mouseX.set(e.clientX);
-      mouseY.set(e.clientY);
+    const handlePointerMove = (clientX: number, clientY: number) => {
+      mouseX.set(clientX);
+      mouseY.set(clientY);
 
       if (!noButtonRef.current || showSuccess) return;
 
@@ -59,12 +59,12 @@ export default function ValentinePage() {
       const centerY = rect.top + rect.height / 2;
 
       const distance = Math.sqrt(
-        Math.pow(e.clientX - centerX, 2) + Math.pow(e.clientY - centerY, 2)
+        Math.pow(clientX - centerX, 2) + Math.pow(clientY - centerY, 2)
       );
 
       // Repulsion logic
       if (distance < 150) {
-        const angle = Math.atan2(centerY - e.clientY, centerX - e.clientX);
+        const angle = Math.atan2(centerY - clientY, centerX - clientX);
         const force = (150 - distance) / 150;
         const moveDist = force * 250;
 
@@ -93,12 +93,48 @@ export default function ValentinePage() {
       }
     };
 
+    const handleMouseMove = (e: MouseEvent) => {
+      handlePointerMove(e.clientX, e.clientY);
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (e.touches.length > 0) {
+        handlePointerMove(e.touches[0].clientX, e.touches[0].clientY);
+      }
+    };
+
     window.addEventListener('mousemove', handleMouseMove);
-    return () => window.removeEventListener('mousemove', handleMouseMove);
+    window.addEventListener('touchmove', handleTouchMove, { passive: true });
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('touchmove', handleTouchMove);
+    };
   }, [showSuccess, attemptCount, buttonX, buttonY, mouseX, mouseY]);
 
   const handleYesClick = () => {
     setShowSuccess(true);
+  };
+
+  // Handle No button tap/click - make it jump away
+  const handleNoButtonInteraction = (e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault();
+    
+    // Jump to a random position
+    const randomX = (Math.random() - 0.5) * (window.innerWidth / 2 - 150);
+    const randomY = (Math.random() - 0.5) * (window.innerHeight / 2 - 100);
+    
+    buttonX.set(randomX);
+    buttonY.set(randomY);
+    
+    // Update text and scale
+    setAttemptCount(prev => {
+      const next = prev + 1;
+      if (next < noTexts.length) {
+        setNoButtonText(noTexts[next]);
+      }
+      return next;
+    });
+    setYesButtonScale(1 + (attemptCount * 0.03));
   };
 
   // Parallax effect for the card
@@ -178,6 +214,8 @@ export default function ValentinePage() {
               className="action-btn no-secondary"
               style={{ x: buttonX, y: buttonY }}
               transition={{ type: 'spring', ...springConfig }}
+              onClick={handleNoButtonInteraction}
+              onTouchStart={handleNoButtonInteraction}
             >
               {noButtonText}
             </motion.button>
