@@ -48,6 +48,8 @@ export default function ValentinePage() {
 
   // Handle Mouse Movement for Repulsion
   useEffect(() => {
+    let isTouching = false;
+    
     const handlePointerMove = (clientX: number, clientY: number) => {
       mouseX.set(clientX);
       mouseY.set(clientY);
@@ -62,54 +64,79 @@ export default function ValentinePage() {
         Math.pow(clientX - centerX, 2) + Math.pow(clientY - centerY, 2)
       );
 
+      // More aggressive on mobile - larger detection radius
+      const detectionRadius = isTouching ? 180 : 150;
+
       // Repulsion logic
-      if (distance < 150) {
+      if (distance < detectionRadius) {
         const angle = Math.atan2(centerY - clientY, centerX - clientX);
-        const force = (150 - distance) / 150;
-        const moveDist = force * 250;
+        const force = (detectionRadius - distance) / detectionRadius;
+        const moveDist = force * (isTouching ? 300 : 250);
 
         let newX = buttonX.get() + Math.cos(angle) * moveDist;
         let newY = buttonY.get() + Math.sin(angle) * moveDist;
 
-        // Boundary checks (roughly keep it on screen)
+        // Boundary checks
         const padding = 100;
-        if (Math.abs(newX) > window.innerWidth / 2 - padding) newX = (window.innerWidth / 2 - padding) * Math.sign(newX);
-        if (Math.abs(newY) > window.innerHeight / 2 - padding) newY = (window.innerHeight / 2 - padding) * Math.sign(newY);
+        const maxX = window.innerWidth / 2 - padding;
+        const maxY = window.innerHeight / 2 - padding;
+        
+        if (Math.abs(newX) > maxX) newX = maxX * Math.sign(newX);
+        if (Math.abs(newY) > maxY) newY = maxY * Math.sign(newY);
 
         buttonX.set(newX);
         buttonY.set(newY);
 
         // Update state for Yes button growth
-        if (distance < 80) {
+        if (distance < 100) {
           setAttemptCount(prev => {
             const next = prev + 1;
-            if (next % 5 === 0) { // Change text every few "near misses"
-               setNoButtonText(noTexts[Math.min(Math.floor(next/5), noTexts.length - 1)]);
+            if (next % 3 === 0) {
+               setNoButtonText(noTexts[Math.min(Math.floor(next/3), noTexts.length - 1)]);
             }
             return next;
           });
-          setYesButtonScale(1 + (attemptCount * 0.02));
+          setYesButtonScale(1 + (attemptCount * 0.03));
         }
       }
     };
 
     const handleMouseMove = (e: MouseEvent) => {
+      isTouching = false;
       handlePointerMove(e.clientX, e.clientY);
     };
 
-    const handleTouchMove = (e: TouchEvent) => {
+    const handleTouchStart = (e: TouchEvent) => {
+      isTouching = true;
       if (e.touches.length > 0) {
         handlePointerMove(e.touches[0].clientX, e.touches[0].clientY);
       }
     };
 
+    const handleTouchMove = (e: TouchEvent) => {
+      isTouching = true;
+      if (e.touches.length > 0) {
+        e.preventDefault();
+        handlePointerMove(e.touches[0].clientX, e.touches[0].clientY);
+      }
+    };
+
+    const handleTouchEnd = () => {
+      isTouching = false;
+    };
+
     window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('touchmove', handleTouchMove, { passive: true });
+    window.addEventListener('touchstart', handleTouchStart, { passive: false });
+    window.addEventListener('touchmove', handleTouchMove, { passive: false });
+    window.addEventListener('touchend', handleTouchEnd);
+    
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('touchstart', handleTouchStart);
       window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleTouchEnd);
     };
-  }, [showSuccess, attemptCount, buttonX, buttonY, mouseX, mouseY]);
+  }, [showSuccess, attemptCount, buttonX, buttonY, mouseX, mouseY, noTexts]);
 
   const handleYesClick = () => {
     setShowSuccess(true);
